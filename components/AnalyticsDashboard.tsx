@@ -9,10 +9,18 @@ export default function AnalyticsDashboard() {
         totalOrders: 0,
         avgOrderValue: 0,
         totalCustomers: 0,
-        revenueByDay: [],
         ordersByStatus: [],
-        topRestaurants: []
+        topRestaurants: [],
+        adminEarnings: {
+            commission: 0,
+            restaurantPlatformFee: 0,
+            transactionFee: 0,
+            deliveryFees: 0,
+            customerPlatformFees: 0,
+            total: 0
+        }
     });
+
     const [loading, setLoading] = useState(true);
     const supabase = createClient();
 
@@ -22,10 +30,18 @@ export default function AnalyticsDashboard() {
 
     const fetchAnalytics = async () => {
         try {
-            // Fetch all orders
+            // Fetch all orders with restaurant details and fee settings
             const { data: orders } = await supabase
                 .from('orders')
-                .select('*, restaurant:restaurants(name)');
+                .select(`
+                    *,
+                    restaurant:restaurants(
+                        name,
+                        commission_percent,
+                        platform_fee_per_order,
+                        transaction_charge_percent
+                    )
+                `);
 
             // Fetch customers count
             const { count: customersCount } = await supabase
@@ -33,13 +49,22 @@ export default function AnalyticsDashboard() {
                 .select('*', { count: 'exact', head: true })
                 .eq('role', 'customer');
 
+            console.log('Analytics: Fetched orders:', orders?.length, 'orders');
+            console.log('Analytics: Sample order:', orders?.[0]);
+            console.log('Analytics: Delivered orders:', orders?.filter(o => o.status === 'delivered').length);
+
             if (orders) {
-                // Calculate total revenue and avg order value
-                const totalRevenue = orders.reduce((sum, order) => sum + (order.total || 0), 0);
-                const totalOrders = orders.length;
+                // Filter to delivered/completed orders for revenue calculations (same as restaurant app)
+                const completedOrders = orders.filter(order =>
+                    order.status === 'delivered' || order.status === 'completed'
+                );
+
+                // Calculate totals (only delivered/completed)
+                const totalRevenue = completedOrders.reduce((sum, order) => sum + (order.total || 0), 0);
+                const totalOrders = completedOrders.length;
                 const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
-                // Group orders by status
+                // Group ALL orders by status (for status chart)
                 const ordersByStatus = orders.reduce((acc: any, order) => {
                     const status = order.status;
                     if (!acc[status]) {
@@ -49,16 +74,50 @@ export default function AnalyticsDashboard() {
                     return acc;
                 }, {});
 
-                // Calculate revenue by restaurant
-                const restaurantRevenue = orders.reduce((acc: any, order) => {
+                // Calculate revenue by restaurant (using subtotal like restaurant app)
+                const restaurantRevenue = completedOrders.reduce((acc: any, order) => {
                     const restaurantName = order.restaurant?.name || 'Unknown';
                     if (!acc[restaurantName]) {
                         acc[restaurantName] = { name: restaurantName, revenue: 0, orders: 0 };
                     }
-                    acc[restaurantName].revenue += order.total || 0;
+                    acc[restaurantName].revenue += order.subtotal || 0; // Use subtotal to match restaurant app
                     acc[restaurantName].orders += 1;
                     return acc;
                 }, {});
+
+                // Calculate Admin Earnings (delivered/completed orders)
+                const adminEarnings = completedOrders.reduce((acc, order) => {
+                    const subtotal = order.subtotal || 0;
+                    const total = order.total || 0;
+                    const deliveryFee = order.delivery_fee || 0;
+                    const customerPlatformFee = order.platform_fee || 0;
+                    const restaurant = order.restaurant;
+
+                    // Fees collected from customer
+                    acc.deliveryFees += deliveryFee;
+                    acc.customerPlatformFees += customerPlatformFee;
+
+                    // Fees from restaurant
+                    if (restaurant) {
+                        const commission = subtotal * ((restaurant.commission_percent || 0) / 100);
+                        const platformFee = restaurant.platform_fee_per_order || 0;
+                        const transactionFee = total * ((restaurant.transaction_charge_percent || 0) / 100);
+
+                        acc.commission += commission;
+                        acc.restaurantPlatformFee += platformFee;
+                        acc.transactionFee += transactionFee;
+                    }
+
+                    acc.total = acc.commission + acc.restaurantPlatformFee + acc.transactionFee + acc.customerPlatformFees;
+                    return acc;
+                }, {
+                    commission: 0,
+                    restaurantPlatformFee: 0,
+                    transactionFee: 0,
+                    deliveryFees: 0,
+                    customerPlatformFees: 0,
+                    total: 0
+                });
 
                 const topRestaurants = Object.values(restaurantRevenue)
                     .sort((a: any, b: any) => b.revenue - a.revenue)
@@ -73,7 +132,8 @@ export default function AnalyticsDashboard() {
                         status,
                         count
                     })),
-                    topRestaurants
+                    topRestaurants,
+                    adminEarnings
                 });
             }
         } catch (error) {
@@ -96,12 +156,51 @@ export default function AnalyticsDashboard() {
 
     return (
         <div className="space-y-8">
+            {/* Admin Earnings Section */}
+            <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-xl shadow-lg p-6 text-white">
+                <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+                    <span>💰</span> Admin Earnings Breakdown
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    <div className="p-4 bg-white/10 rounded-lg backdrop-blur-sm">
+                        <p className="text-slate-300 text-sm mb-1">Total Earnings</p>
+                        <p className="text-2xl font-bold text-emerald-400">₹{analytics.adminEarnings.total.toFixed(2)}</p>
+                        <p className="text-xs text-slate-400 mt-1">Net Income</p>
+                    </div>
+                    <div>
+                        <p className="text-slate-400 text-sm mb-1">Commission</p>
+                        <p className="text-xl font-semibold text-white">₹{analytics.adminEarnings.commission.toFixed(2)}</p>
+                        <p className="text-xs text-slate-500">% from food value</p>
+                    </div>
+                    <div>
+                        <p className="text-slate-400 text-sm mb-1">Restaurant Fees</p>
+                        <p className="text-xl font-semibold text-white">₹{analytics.adminEarnings.restaurantPlatformFee.toFixed(2)}</p>
+                        <p className="text-xs text-slate-500">Per order from rest.</p>
+                    </div>
+                    <div>
+                        <p className="text-slate-400 text-sm mb-1">Tx Charges</p>
+                        <p className="text-xl font-semibold text-white">₹{analytics.adminEarnings.transactionFee.toFixed(2)}</p>
+                        <p className="text-xs text-slate-500">% from total</p>
+                    </div>
+                    <div>
+                        <p className="text-slate-400 text-sm mb-1">Customer Platform Fee</p>
+                        <p className="text-xl font-semibold text-cyan-300">₹{analytics.adminEarnings.customerPlatformFees.toFixed(2)}</p>
+                        <p className="text-xs text-slate-500">From customers</p>
+                    </div>
+                    <div>
+                        <p className="text-slate-400 text-sm mb-1">Delivery Fees</p>
+                        <p className="text-xl font-semibold text-amber-300">₹{analytics.adminEarnings.deliveryFees.toFixed(2)}</p>
+                        <p className="text-xs text-slate-500">Collected (paid to riders)</p>
+                    </div>
+                </div>
+            </div>
+
             {/* Key Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 hover:shadow-md transition-shadow">
-                    <p className="text-sm font-medium text-slate-600 mb-2">Total Revenue</p>
-                    <p className="text-3xl font-bold text-emerald-600">₹{analytics.totalRevenue.toFixed(2)}</p>
-                    <p className="text-xs text-slate-500 mt-2">All time earnings</p>
+                    <p className="text-sm font-medium text-slate-600 mb-2">Total GMV</p>
+                    <p className="text-3xl font-bold text-slate-900">₹{analytics.totalRevenue.toFixed(2)}</p>
+                    <p className="text-xs text-slate-500 mt-2">Gross Merchandise Value</p>
                 </div>
 
                 <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 hover:shadow-md transition-shadow">

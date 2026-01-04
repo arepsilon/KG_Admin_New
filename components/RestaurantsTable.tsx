@@ -6,11 +6,12 @@ import { createClient } from '@/lib/supabase/client';
 
 import AddRestaurantModal from './AddRestaurantModal';
 import RestaurantMenuModal from './RestaurantMenuModal';
-import { Edit2, Upload, MapPin, Phone, DollarSign, Percent, CreditCard, Store, Image as ImageIcon } from 'lucide-react';
+import { Edit2, Upload, MapPin, Phone, DollarSign, Percent, CreditCard, Store, Image as ImageIcon, Search, Plus, Filter, FileText, Lock, Power, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface Restaurant {
     id: string;
     name: string;
+    email: string;
     address: string;
     phone_number: string;
     is_active: boolean;
@@ -30,6 +31,7 @@ export default function RestaurantsTable() {
     const [expandedRestaurants, setExpandedRestaurants] = useState<Set<string>>(new Set());
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [selectedRestaurantForMenu, setSelectedRestaurantForMenu] = useState<any | null>(null);
+    const [resettingPasswordId, setResettingPasswordId] = useState<string | null>(null);
     const supabase = createClient();
 
     useEffect(() => {
@@ -100,29 +102,33 @@ export default function RestaurantsTable() {
         setExpandedRestaurants(new Set());
     };
 
-    const toggleActiveStatus = async (restaurantId: string, currentStatus: boolean) => {
-        const { error } = await supabase
-            .from('restaurants')
-            .update({ is_active: !currentStatus })
-            .eq('id', restaurantId);
+    const toggleActiveStatus = async (id: string, currentStatus: boolean) => {
+        try {
+            const { error } = await supabase
+                .from('restaurants')
+                .update({ is_active: !currentStatus })
+                .eq('id', id);
 
-        if (error) {
-            alert('Error updating restaurant status');
-        } else {
+            if (error) throw error;
             fetchRestaurants();
+        } catch (error: any) {
+            console.error('Error updating active status:', error.message);
+            alert('Failed to update status');
         }
     };
 
-    const toggleOpenStatus = async (restaurantId: string, currentStatus: boolean) => {
-        const { error } = await supabase
-            .from('restaurants')
-            .update({ is_open: !currentStatus })
-            .eq('id', restaurantId);
+    const toggleOpenStatus = async (id: string, currentStatus: boolean) => {
+        try {
+            const { error } = await supabase
+                .from('restaurants')
+                .update({ is_open: !currentStatus })
+                .eq('id', id);
 
-        if (error) {
-            alert('Error updating open status');
-        } else {
+            if (error) throw error;
             fetchRestaurants();
+        } catch (error: any) {
+            console.error('Error updating status:', error.message);
+            alert('Failed to update status');
         }
     };
 
@@ -145,6 +151,37 @@ export default function RestaurantsTable() {
             console.error(error);
         } else {
             fetchRestaurants();
+        }
+    };
+
+    const handleSetPassword = async (restaurantId: string, restaurantName: string) => {
+        const newPassword = prompt(`Enter new password for ${restaurantName}:`);
+        if (!newPassword) return; // Cancelled
+        if (newPassword.length < 6) {
+            alert('Password must be at least 6 characters long');
+            return;
+        }
+
+        setResettingPasswordId(restaurantId);
+        try {
+            const response = await fetch('/api/restaurants/update-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ restaurantId, newPassword }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to update password');
+            }
+
+            alert('Password updated successfully! 🔑');
+        } catch (error: any) {
+            console.error('Update Password Error:', error);
+            alert('Failed to update password: ' + error.message);
+        } finally {
+            setResettingPasswordId(null);
         }
     };
 
@@ -274,22 +311,38 @@ export default function RestaurantsTable() {
                                 <div className="flex items-start justify-between">
                                     <div className="flex-1">
                                         <div className="flex items-center gap-4 mb-3">
-                                            <h3 className={`text-xl font-bold ${isActive ? 'text-gray-900' : 'text-gray-500'
-                                                }`}>
-                                                🍽️ {restaurant.name}
-                                            </h3>
-                                            <span className={`px-3 py-1 text-sm font-semibold rounded-full ${restaurant.is_active
-                                                ? 'bg-green-100 text-green-800'
-                                                : 'bg-gray-200 text-gray-600'
-                                                }`}>
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-orange-100 rounded-lg">
+                                                    <Store className="w-5 h-5 text-orange-600" />
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-semibold text-gray-900">{restaurant.name}</h3>
+                                                    <p className="text-sm text-gray-500">{restaurant.address.split(',')[0]} (ID: {restaurant.id.slice(0, 8)})</p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    toggleActiveStatus(restaurant.id, restaurant.is_active);
+                                                }}
+                                                className={`px-3 py-1 text-sm font-semibold rounded-full transition-colors hover:bg-opacity-80 ${restaurant.is_active
+                                                    ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                                                    : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                                                    }`}
+                                                title="Toggle Visibility in Customer App"
+                                            >
                                                 {restaurant.is_active ? '✓ Active' : '✗ Inactive'}
-                                            </span>
-                                            <span className={`px-3 py-1 text-sm font-semibold rounded-full ${restaurant.is_open
-                                                ? 'bg-blue-100 text-blue-800'
-                                                : 'bg-gray-200 text-gray-600'
-                                                }`}>
-                                                {restaurant.is_open ? '🟢 Open' : '🔴 Closed'}
-                                            </span>
+                                            </button>
+                                            <div className="flex items-center gap-4">
+                                                <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${restaurant.is_open
+                                                    ? 'bg-green-50 text-green-700 border-green-200'
+                                                    : 'bg-red-50 text-red-700 border-red-200'
+                                                    }`}>
+                                                    <div className={`w-1.5 h-1.5 rounded-full ${restaurant.is_open ? 'bg-green-600' : 'bg-red-600'}`}></div>
+                                                    {restaurant.is_open ? 'Open' : 'Closed'}
+                                                </span>
+                                                {expandedRestaurants.has(restaurant.id) ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                                            </div>
                                         </div>
 
                                         <div className="flex items-center gap-6 text-sm">
@@ -495,24 +548,38 @@ export default function RestaurantsTable() {
 
 
                                     {/* Actions */}
-                                    <div className="flex gap-3">
+                                    <div className="flex flex-wrap gap-3">
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 toggleOpenStatus(restaurant.id, restaurant.is_open);
                                             }}
-                                            className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+                                            className={`flex-1 min-w-[140px] px-4 py-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 border ${restaurant.is_open
+                                                ? 'bg-red-50 text-red-700 border-red-100 hover:bg-red-100'
+                                                : 'bg-green-50 text-green-700 border-green-100 hover:bg-green-100'
+                                                }`}
                                         >
-                                            {restaurant.is_open ? '🔴 Close Restaurant' : '🟢 Open Restaurant'}
+                                            <Power size={16} />
+                                            {restaurant.is_open ? 'Close Restaurant' : 'Open Restaurant'}
                                         </button>
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 setSelectedRestaurantForMenu(restaurant);
                                             }}
-                                            className="flex-1 px-4 py-3 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-200 transition-colors flex items-center justify-center gap-2"
+                                            className="flex-1 min-w-[140px] px-4 py-3 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors flex items-center justify-center gap-2"
                                         >
-                                            <span>📋</span> Manage Menu
+                                            <FileText size={16} /> Manage Menu
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleSetPassword(restaurant.id, restaurant.name);
+                                            }}
+                                            disabled={resettingPasswordId === restaurant.id}
+                                            className="flex-1 min-w-[140px] px-4 py-3 bg-violet-50 text-violet-700 border border-violet-100 rounded-lg text-sm font-medium hover:bg-violet-100 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                                        >
+                                            <Lock size={16} /> {resettingPasswordId === restaurant.id ? 'Updating...' : 'Set Password'}
                                         </button>
                                     </div>
                                 </div>
@@ -605,3 +672,4 @@ function LocationEditor({ restaurant, onUpdate }: { restaurant: any, onUpdate: (
         </div>
     );
 }
+

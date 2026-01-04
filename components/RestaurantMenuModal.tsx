@@ -15,6 +15,7 @@ export default function RestaurantMenuModal({ isOpen, onClose, restaurantId, res
     const [items, setItems] = useState<any[]>([]);
     const [categories, setCategories] = useState<any[]>([]);
     const [activeTab, setActiveTab] = useState<'list' | 'add'>('list');
+    const [editingId, setEditingId] = useState<string | null>(null);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -26,7 +27,14 @@ export default function RestaurantMenuModal({ isOpen, onClose, restaurantId, res
         is_vegan: false,
         preparation_time: '15'
     });
+
     const [imageFile, setImageFile] = useState<File | null>(null);
+    const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+    // New Category State
+    const [isAddingCategory, setIsAddingCategory] = useState(false);
+    const [newCategoryName, setNewCategoryName] = useState('');
+    const [creatingCategory, setCreatingCategory] = useState(false);
 
     const supabase = createClient();
 
@@ -75,43 +83,88 @@ export default function RestaurantMenuModal({ isOpen, onClose, restaurantId, res
         }
     };
 
+
+    const handleCreateCategory = async () => {
+        if (!newCategoryName.trim()) return;
+        setCreatingCategory(true);
+
+        try {
+            // Get highest sort order to append to end
+            const { data: maxOrderData } = await supabase
+                .from('categories')
+                .select('sort_order')
+                .order('sort_order', { ascending: false })
+                .limit(1)
+                .single();
+
+            const nextOrder = (maxOrderData?.sort_order || 0) + 10;
+
+            const { data, error } = await supabase
+                .from('categories')
+                .insert({
+                    name: newCategoryName.trim(),
+                    sort_order: nextOrder
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            if (data) {
+                // Refresh categories
+                const { data: catData } = await supabase.from('categories').select('*').order('name');
+                setCategories(catData || []);
+
+                // Select the new category automatically
+                setFormData(prev => ({ ...prev, category_id: data.id }));
+
+                // Reset state
+                setNewCategoryName('');
+                setIsAddingCategory(false);
+                alert('Category Created! ✨');
+            }
+        } catch (error: any) {
+            console.error('Error creating category:', error);
+            alert('Failed to create category: ' + (error.message || JSON.stringify(error)));
+        } finally {
+            setCreatingCategory(false);
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
 
         try {
-            let imageUrl = null;
+            let imageUrl = editingId ? items.find(i => i.id === editingId)?.image_url : null;
+
             if (imageFile) {
                 imageUrl = await handleImageUpload(imageFile);
                 if (!imageUrl) throw new Error('Image upload failed');
             }
 
-            const { error } = await supabase.from('menu_items').insert({
+            const itemData = {
                 restaurant_id: restaurantId,
                 name: formData.name,
                 description: formData.description,
                 price: parseFloat(formData.price),
-                category_id: formData.category_id || null, // Handle optional category
+                category_id: formData.category_id || null,
                 is_vegetarian: formData.is_vegetarian,
                 is_vegan: formData.is_vegan,
                 preparation_time: parseInt(formData.preparation_time),
+                // Only update image_url if a new one was uploaded or if it was null
                 image_url: imageUrl,
                 is_available: true
-            });
+            };
+
+            const { error } = editingId
+                ? await supabase.from('menu_items').update(itemData).eq('id', editingId)
+                : await supabase.from('menu_items').insert({ ...itemData });
 
             if (error) throw error;
 
-            alert('Menu Item Added! 🍔');
-            setFormData({
-                name: '',
-                description: '',
-                price: '',
-                category_id: '',
-                is_vegetarian: false,
-                is_vegan: false,
-                preparation_time: '15'
-            });
-            setImageFile(null);
+            alert(editingId ? 'Menu Item Updated! ✨' : 'Menu Item Added! 🍔');
+            resetForm();
             setActiveTab('list');
             fetchMenuData(); // Refresh list
 
@@ -126,9 +179,49 @@ export default function RestaurantMenuModal({ isOpen, onClose, restaurantId, res
         if (!confirm('Are you sure you want to delete this item?')) return;
 
         const { error } = await supabase.from('menu_items').delete().eq('id', id);
-        if (error) alert('Failed to delete item');
+        if (error) {
+            console.error('Delete error:', error);
+            alert('Failed to delete item: ' + error.message);
+        }
         else fetchMenuData();
     };
+
+    const handleEdit = (item: any) => {
+        setFormData({
+            name: item.name,
+            description: item.description || '',
+            price: item.price.toString(),
+            category_id: item.category_id || '',
+            is_vegetarian: item.is_vegetarian,
+            is_vegan: item.is_vegan,
+            preparation_time: item.preparation_time?.toString() || '15'
+        });
+        setEditingId(item.id);
+        setActiveTab('add');
+        setImageFile(null);
+        setImagePreview(item.image_url || null);
+    };
+
+    const resetForm = () => {
+        setFormData({
+            name: '',
+            description: '',
+            price: '',
+            category_id: '',
+            is_vegetarian: false,
+            is_vegan: false,
+            preparation_time: '15'
+        });
+        setImageFile(null);
+        setImagePreview(null);
+        setEditingId(null);
+    };
+
+    useEffect(() => {
+        if (activeTab === 'list') {
+            resetForm();
+        }
+    }, [activeTab]);
 
     if (!isOpen) return null;
 
@@ -146,8 +239,8 @@ export default function RestaurantMenuModal({ isOpen, onClose, restaurantId, res
                     <button
                         onClick={() => setActiveTab('list')}
                         className={`flex-1 py-4 font-semibold text-center transition-colors ${activeTab === 'list'
-                                ? 'border-b-2 border-orange-500 text-orange-600 bg-orange-50'
-                                : 'text-gray-500 hover:bg-gray-50'
+                            ? 'border-b-2 border-orange-500 text-orange-600 bg-orange-50'
+                            : 'text-gray-500 hover:bg-gray-50'
                             }`}
                     >
                         📋 Menu Items ({items.length})
@@ -155,11 +248,11 @@ export default function RestaurantMenuModal({ isOpen, onClose, restaurantId, res
                     <button
                         onClick={() => setActiveTab('add')}
                         className={`flex-1 py-4 font-semibold text-center transition-colors ${activeTab === 'add'
-                                ? 'border-b-2 border-orange-500 text-orange-600 bg-orange-50'
-                                : 'text-gray-500 hover:bg-gray-50'
+                            ? 'border-b-2 border-orange-500 text-orange-600 bg-orange-50'
+                            : 'text-gray-500 hover:bg-gray-50'
                             }`}
                     >
-                        ➕ Add New Item
+                        {editingId ? '✏️ Edit Item' : '➕ Add New Item'}
                     </button>
                 </div>
 
@@ -181,12 +274,22 @@ export default function RestaurantMenuModal({ isOpen, onClose, restaurantId, res
                                     <div className="flex-1">
                                         <div className="flex justify-between items-start">
                                             <h3 className="font-bold text-lg text-black">{item.name}</h3>
-                                            <button
-                                                onClick={() => handleDelete(item.id)}
-                                                className="text-red-400 hover:text-red-600 font-bold px-2"
-                                            >
-                                                🗑️
-                                            </button>
+                                            <div className="flex">
+                                                <button
+                                                    onClick={() => handleEdit(item)}
+                                                    className="text-blue-400 hover:text-blue-600 font-bold px-2"
+                                                    title="Edit"
+                                                >
+                                                    ✏️
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDelete(item.id)}
+                                                    className="text-red-400 hover:text-red-600 font-bold px-2"
+                                                    title="Delete"
+                                                >
+                                                    🗑️
+                                                </button>
+                                            </div>
                                         </div>
                                         <p className="text-sm text-gray-500 line-clamp-2 mb-2">{item.description}</p>
                                         <div className="flex justify-between items-center mt-auto">
@@ -214,9 +317,9 @@ export default function RestaurantMenuModal({ isOpen, onClose, restaurantId, res
                                 {/* Image Upload */}
                                 <div className="flex justify-center mb-6">
                                     <div className="text-center">
-                                        <label className="block w-32 h-32 rounded-xl border-2 border-dashed border-gray-300 hover:border-orange-500 cursor-pointer flex flex-col items-center justify-center transition-colors bg-gray-50">
-                                            {imageFile ? (
-                                                <span className="text-sm text-green-600 font-semibold p-2 text-center">{imageFile.name}</span>
+                                        <label className="block w-32 h-32 rounded-xl border-2 border-dashed border-gray-300 hover:border-orange-500 cursor-pointer flex flex-col items-center justify-center transition-colors bg-gray-50 overflow-hidden relative">
+                                            {imagePreview ? (
+                                                <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
                                             ) : (
                                                 <>
                                                     <span className="text-4xl mb-2">📸</span>
@@ -227,7 +330,13 @@ export default function RestaurantMenuModal({ isOpen, onClose, restaurantId, res
                                                 type="file"
                                                 accept="image/*"
                                                 className="hidden"
-                                                onChange={e => e.target.files && setImageFile(e.target.files[0])}
+                                                onChange={e => {
+                                                    if (e.target.files && e.target.files[0]) {
+                                                        const file = e.target.files[0];
+                                                        setImageFile(file);
+                                                        setImagePreview(URL.createObjectURL(file));
+                                                    }
+                                                }}
                                             />
                                         </label>
                                     </div>
@@ -268,39 +377,100 @@ export default function RestaurantMenuModal({ isOpen, onClose, restaurantId, res
 
                                     <div>
                                         <label className="block text-sm font-semibold text-black mb-1">Category</label>
-                                        <select
-                                            className="w-full p-2 border rounded-lg text-black focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                                            value={formData.category_id}
-                                            onChange={e => setFormData({ ...formData, category_id: e.target.value })}
-                                        >
-                                            <option value="">Select Category</option>
-                                            {categories.map(cat => (
-                                                <option key={cat.id} value={cat.id}>{cat.name}</option>
-                                            ))}
-                                        </select>
+                                        {!isAddingCategory ? (
+                                            <div className="flex gap-2">
+                                                <select
+                                                    className="w-full p-2 border rounded-lg text-black focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                                                    value={formData.category_id}
+                                                    onChange={e => setFormData({ ...formData, category_id: e.target.value })}
+                                                >
+                                                    <option value="">Select Category</option>
+                                                    {categories.map(cat => (
+                                                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                                    ))}
+                                                </select>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsAddingCategory(true)}
+                                                    className="bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-2 rounded-lg font-bold border border-gray-300"
+                                                    title="Create New Category"
+                                                >
+                                                    +
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex gap-2">
+                                                <input
+                                                    className="w-full p-2 border rounded-lg text-black focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                                                    placeholder="New Category Name"
+                                                    value={newCategoryName}
+                                                    onChange={e => setNewCategoryName(e.target.value)}
+                                                    disabled={creatingCategory}
+                                                    autoFocus
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={handleCreateCategory}
+                                                    disabled={creatingCategory || !newCategoryName.trim()}
+                                                    className="bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded-lg font-bold disabled:opacity-50"
+                                                >
+                                                    {creatingCategory ? '...' : '✓'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsAddingCategory(false)}
+                                                    className="bg-red-100 hover:bg-red-200 text-red-600 px-3 py-2 rounded-lg font-bold"
+                                                >
+                                                    ✕
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
-                                <div className="flex gap-4 pt-2">
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            className="w-4 h-4 text-orange-500 rounded focus:ring-orange-500"
-                                            checked={formData.is_vegetarian}
-                                            onChange={e => setFormData({ ...formData, is_vegetarian: e.target.checked })}
-                                        />
-                                        <span className="text-sm font-medium text-black">Vegetarian</span>
-                                    </label>
+                                <div className="space-y-3 pt-2">
+                                    <label className="block text-sm font-semibold text-black">Dietary Type</label>
+                                    <div className="flex gap-4">
+                                        <button
+                                            type="button"
+                                            onClick={() => setFormData({ ...formData, is_vegetarian: true })}
+                                            className={`flex-1 py-3 px-4 rounded-xl border-2 flex items-center justify-center gap-2 transition-all ${formData.is_vegetarian
+                                                ? 'border-green-500 bg-green-50 text-green-700'
+                                                : 'border-gray-200 text-gray-400 hover:border-gray-300'
+                                                }`}
+                                        >
+                                            <div className={`w-4 h-4 rounded-sm border-2 flex items-center justify-center ${formData.is_vegetarian ? 'border-green-600' : 'border-gray-400'}`}>
+                                                <div className={`w-2 h-2 rounded-full ${formData.is_vegetarian ? 'bg-green-600' : 'bg-gray-400'}`} />
+                                            </div>
+                                            <span className="font-bold">Veg</span>
+                                        </button>
 
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            className="w-4 h-4 text-orange-500 rounded focus:ring-orange-500"
-                                            checked={formData.is_vegan}
-                                            onChange={e => setFormData({ ...formData, is_vegan: e.target.checked })}
-                                        />
-                                        <span className="text-sm font-medium text-black">Vegan</span>
-                                    </label>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFormData({ ...formData, is_vegetarian: false, is_vegan: false })}
+                                            className={`flex-1 py-3 px-4 rounded-xl border-2 flex items-center justify-center gap-2 transition-all ${!formData.is_vegetarian
+                                                ? 'border-red-500 bg-red-50 text-red-700'
+                                                : 'border-gray-200 text-gray-400 hover:border-gray-300'
+                                                }`}
+                                        >
+                                            <div className={`w-4 h-4 rounded-sm border-2 flex items-center justify-center ${!formData.is_vegetarian ? 'border-red-600' : 'border-gray-400'}`}>
+                                                <div className={`w-2 h-2 rounded-full ${!formData.is_vegetarian ? 'bg-red-600' : 'bg-gray-400'}`} />
+                                            </div>
+                                            <span className="font-bold">Non-Veg</span>
+                                        </button>
+                                    </div>
+
+                                    {formData.is_vegetarian && (
+                                        <label className="flex items-center gap-2 cursor-pointer mt-2 p-2 rounded-lg hover:bg-gray-50">
+                                            <input
+                                                type="checkbox"
+                                                className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
+                                                checked={formData.is_vegan}
+                                                onChange={e => setFormData({ ...formData, is_vegan: e.target.checked })}
+                                            />
+                                            <span className="text-sm font-medium text-gray-700">Also Vegan?</span>
+                                        </label>
+                                    )}
                                 </div>
 
                                 <button
@@ -308,7 +478,7 @@ export default function RestaurantMenuModal({ isOpen, onClose, restaurantId, res
                                     disabled={loading}
                                     className="w-full py-3 bg-orange-600 text-white font-bold rounded-xl shadow-md hover:bg-orange-700 transition-colors disabled:opacity-50 mt-4"
                                 >
-                                    {loading ? 'Adding Item...' : 'Add Menu Item'}
+                                    {loading ? 'Saving...' : (editingId ? 'Update Menu Item' : 'Add Menu Item')}
                                 </button>
                             </form>
                         </div>

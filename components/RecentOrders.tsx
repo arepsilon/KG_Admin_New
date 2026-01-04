@@ -39,7 +39,7 @@ export default function RecentOrders() {
                 .select(`
                     *,
                     restaurant:restaurants(name),
-                    customer:profiles!customer_id(full_name)
+                    customer:profiles!customer_id(full_name, orders(count))
                 `)
                 .order('created_at', { ascending: false })
                 .limit(10);
@@ -124,6 +124,23 @@ export default function RecentOrders() {
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                                     {order.customer?.full_name || 'Unknown'}
+                                    <span className="ml-2">
+                                        {(() => {
+                                            const orderCount = order.customer?.orders?.[0]?.count || 0;
+                                            if (orderCount === 1) {
+                                                return (
+                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-800">
+                                                        New
+                                                    </span>
+                                                );
+                                            }
+                                            return (
+                                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700">
+                                                    Existing
+                                                </span>
+                                            );
+                                        })()}
+                                    </span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                                     {order.restaurant?.name || 'Unknown'}

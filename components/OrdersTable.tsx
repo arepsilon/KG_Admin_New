@@ -40,8 +40,8 @@ export default function OrdersTable() {
             .select(`
                 *,
                 restaurant:restaurants(name),
-                customer:profiles!customer_id(full_name, phone),
-                address:addresses(address_line1, city, label),
+                customer:profiles!customer_id(full_name, phone, orders(count)),
+                address:addresses(address_line1, city, label, latitude, longitude),
                 order_items(
                     *,
                     menu_item:menu_items(name, price)
@@ -179,6 +179,23 @@ export default function OrdersTable() {
                                                 <p className="text-gray-500">Customer</p>
                                                 <p className="font-medium text-gray-900">{order.customer?.full_name || 'Unknown'}</p>
                                                 <p className="text-gray-600 text-xs">{order.customer?.phone}</p>
+                                                <div className="mt-1">
+                                                    {(() => {
+                                                        const orderCount = order.customer?.orders?.[0]?.count || 0;
+                                                        if (orderCount === 1) {
+                                                            return (
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                                                    🌟 New Customer
+                                                                </span>
+                                                            );
+                                                        }
+                                                        return (
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
+                                                                Existing Customer ({orderCount} orders)
+                                                            </span>
+                                                        );
+                                                    })()}
+                                                </div>
                                             </div>
                                             <div>
                                                 <p className="text-gray-500">Restaurant</p>
@@ -187,6 +204,21 @@ export default function OrdersTable() {
                                             <div>
                                                 <p className="text-gray-500">Total Amount</p>
                                                 <p className="font-bold text-lg text-orange-600">₹{order.total.toFixed(2)}</p>
+                                                {(order.status === 'cancelled' || order.status === 'rejected') && (
+                                                    <div className="mt-2 text-sm">
+                                                        <span className="text-gray-500 block mb-1">
+                                                            {order.status === 'cancelled' ? 'Cancelled By:' : 'Rejected By:'}
+                                                        </span>
+                                                        <span className={`px-2 py-0.5 rounded text-xs font-medium border ${order.cancelled_by === 'customer'
+                                                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                                            : order.cancelled_by === 'restaurant'
+                                                                ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                                                : 'bg-gray-100 text-gray-700 border-gray-200'
+                                                            }`}>
+                                                            {(order.cancelled_by || 'Unknown').toUpperCase()}
+                                                        </span>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -213,7 +245,13 @@ export default function OrdersTable() {
                                             <h4 className="font-semibold text-gray-900 mb-2">📍 Delivery Address</h4>
                                             <div className="bg-white p-4 rounded-lg border border-gray-200">
                                                 <p className="font-medium text-gray-900">{order.address?.label}</p>
-                                                <p className="text-sm text-gray-600">{order.address?.address_line1}</p>
+                                                <p className="text-sm text-gray-600 mb-2">{order.address?.address_line1}</p>
+                                                {order.address?.latitude && order.address?.longitude && (
+                                                    <div className="text-xs bg-gray-50 p-2 rounded border border-gray-200 text-gray-500 font-mono">
+                                                        Lat: {order.address.latitude}<br />
+                                                        Long: {order.address.longitude}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 
@@ -266,10 +304,7 @@ export default function OrdersTable() {
                                                 <span className="text-gray-600">Delivery Fee</span>
                                                 <span className="font-medium">₹{order.delivery_fee.toFixed(2)}</span>
                                             </div>
-                                            <div className="flex justify-between py-2">
-                                                <span className="text-gray-600">Tax</span>
-                                                <span className="font-medium">₹{order.tax.toFixed(2)}</span>
-                                            </div>
+
                                             <div className="flex justify-between py-3 border-t border-gray-200 mt-2">
                                                 <span className="font-bold text-gray-900">Total</span>
                                                 <span className="font-bold text-xl text-orange-600">₹{order.total.toFixed(2)}</span>

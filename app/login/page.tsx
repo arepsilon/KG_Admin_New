@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { UtensilsCrossed } from 'lucide-react';
 
 export default function LoginPage() {
     const [email, setEmail] = useState('');
@@ -56,8 +57,13 @@ export default function LoginPage() {
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-orange-100">
             <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
                 <div className="text-center mb-8">
-                    <h1 className="text-4xl font-bold text-gray-900 mb-2">🍔 KhanaGo</h1>
-                    <p className="text-gray-600">Admin Dashboard</p>
+                    <div className="flex justify-center mb-4">
+                        <div className="bg-orange-100 p-3 rounded-xl">
+                            <UtensilsCrossed className="w-8 h-8 text-orange-600" />
+                        </div>
+                    </div>
+                    <h1 className="text-3xl font-bold text-slate-900 mb-2">KhanaGo</h1>
+                    <p className="text-slate-500">Admin Dashboard</p>
                 </div>
 
                 <form onSubmit={handleLogin} className="space-y-6">
@@ -71,7 +77,7 @@ export default function LoginPage() {
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             required
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900"
                             placeholder="admin@example.com"
                         />
                     </div>
@@ -86,7 +92,7 @@ export default function LoginPage() {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             required
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900"
                             placeholder="••••••••"
                         />
                     </div>
@@ -96,6 +102,8 @@ export default function LoginPage() {
                             {error}
                         </div>
                     )}
+
+
 
                     <button
                         type="submit"
