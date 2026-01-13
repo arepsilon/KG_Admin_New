@@ -9,7 +9,7 @@ export default function RidersPage() {
     const [formData, setFormData] = useState({ full_name: '', phone: '' });
     const [loading, setLoading] = useState(false);
     const [createdRider, setCreatedRider] = useState<any>(null);
-    const supabase = createClient();
+    const supabase = createClient(); 
 
     useEffect(() => {
         fetchRiders();
