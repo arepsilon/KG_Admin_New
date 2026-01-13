@@ -15,7 +15,7 @@ type OrderItem = {
     id: string;
     quantity: number;
     unit_price: number;
-    menu_item: { name: string };
+    menu_item: { name: string }[];
 };
 
 type Order = {
@@ -294,7 +294,7 @@ Please confirm receipt of this report.`;
                                                 <ul className="text-xs space-y-0.5">
                                                     {order.order_items?.map((item) => (
                                                         <li key={item.id}>
-                                                            {item.quantity}x {item.menu_item?.name}
+                                                            {item.quantity}x {item.menu_item?.[0]?.name}
                                                         </li>
                                                     ))}
                                                 </ul>
