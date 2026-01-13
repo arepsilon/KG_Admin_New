@@ -6,7 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 
 import AddRestaurantModal from './AddRestaurantModal';
 import RestaurantMenuModal from './RestaurantMenuModal';
-import { Edit2, Upload, MapPin, Phone, DollarSign, Percent, CreditCard, Store, Image as ImageIcon, Search, Plus, Filter, FileText, Lock, Power, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import RestaurantReorderModal from './RestaurantReorderModal';
+import { Edit2, Upload, MapPin, Phone, DollarSign, Percent, CreditCard, Store, Image as ImageIcon, Search, Plus, Filter, FileText, Lock, Power, Trash2, ChevronDown, ChevronUp, ArrowUpDown } from 'lucide-react';
 
 interface Restaurant {
     id: string;
@@ -30,6 +31,7 @@ export default function RestaurantsTable() {
     const [filter, setFilter] = useState('all');
     const [expandedRestaurants, setExpandedRestaurants] = useState<Set<string>>(new Set());
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [isReorderModalOpen, setIsReorderModalOpen] = useState(false);
     const [selectedRestaurantForMenu, setSelectedRestaurantForMenu] = useState<any | null>(null);
     const [resettingPasswordId, setResettingPasswordId] = useState<string | null>(null);
     const supabase = createClient();
@@ -66,7 +68,7 @@ export default function RestaurantsTable() {
     *,
     orders(count)
         `)
-            .order('created_at', { ascending: false });
+            .order('sort_order', { ascending: true });
 
         if (filter === 'active') {
             query = query.eq('is_active', true);
@@ -250,6 +252,11 @@ export default function RestaurantsTable() {
                     fetchRestaurants();
                 }}
             />
+            <RestaurantReorderModal
+                isOpen={isReorderModalOpen}
+                onClose={() => setIsReorderModalOpen(false)}
+                onSuccess={() => fetchRestaurants()} // Refresh list on save
+            />
 
             {/* Filters */}
             <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
@@ -261,6 +268,12 @@ export default function RestaurantsTable() {
                             className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2"
                         >
                             <span>➕</span> Add Restaurant
+                        </button>
+                        <button
+                            onClick={() => setIsReorderModalOpen(true)}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2"
+                        >
+                            <ArrowUpDown size={16} /> Reorder
                         </button>
                         <button
                             onClick={expandedRestaurants.size === 0 ? expandAll : collapseAll}
@@ -431,9 +444,10 @@ export default function RestaurantsTable() {
                                         <div className="space-y-4">
                                             <div>
                                                 <h4 className="font-semibold text-gray-900 mb-2">📝 Description</h4>
-                                                <p className="text-sm text-gray-600">
-                                                    {restaurant.description || 'No description available'}
-                                                </p>
+                                                <DescriptionEditor
+                                                    restaurant={restaurant}
+                                                    onUpdate={(desc) => updateGenericField(restaurant.id, 'description', desc)}
+                                                />
                                             </div>
 
                                             <div>
@@ -475,11 +489,11 @@ export default function RestaurantsTable() {
                                         </div>
                                     </div>
 
-                                    {/* Platform Charges */}
+                                    {/* Platform Charges & Sorting */}
                                     <div className="mb-8">
                                         <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
                                             <span className="text-gray-400"><CreditCard size={18} /></span>
-                                            <span>Platform Charges</span>
+                                            <span>Configuration</span>
                                         </h4>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                             {/* Commission Card */}
@@ -669,6 +683,48 @@ function LocationEditor({ restaurant, onUpdate }: { restaurant: any, onUpdate: (
             >
                 {isDirty ? 'Access Saved' : 'Saved'}
             </button>
+        </div>
+    );
+}
+
+function DescriptionEditor({ restaurant, onUpdate }: { restaurant: any, onUpdate: (desc: string) => void }) {
+    const [description, setDescription] = useState(restaurant.description || '');
+    const [isDirty, setIsDirty] = useState(false);
+
+    useEffect(() => {
+        if (description !== (restaurant.description || '')) {
+            setIsDirty(true);
+        } else {
+            setIsDirty(false);
+        }
+    }, [description, restaurant]);
+
+    return (
+        <div className="mt-2">
+            <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all resize-none"
+                rows={3}
+                placeholder="Enter restaurant description..."
+            />
+            <div className="flex justify-end mt-2">
+                <button
+                    disabled={!isDirty}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onUpdate(description);
+                        setIsDirty(false);
+                    }}
+                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm ${isDirty
+                        ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200'
+                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        }`}
+                >
+                    Save Description
+                </button>
+            </div>
         </div>
     );
 }

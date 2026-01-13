@@ -19,7 +19,8 @@ import {
     Carrot,
     List,
     Layers,
-    Tag
+    Tag,
+    Receipt
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -40,6 +41,7 @@ export default function Sidebar() {
         { name: 'Users', href: '/dashboard/users', icon: Users },
         { name: 'Riders', href: '/dashboard/riders', icon: Bike },
         { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
+        { name: 'Payouts', href: '/dashboard/payouts', icon: Receipt },
         { name: 'Grocery', href: '/dashboard/grocery', icon: Carrot },
         { name: 'Promos', href: '/dashboard/ads', icon: Megaphone },
         { name: 'Coupons', href: '/dashboard/coupons', icon: Tag },

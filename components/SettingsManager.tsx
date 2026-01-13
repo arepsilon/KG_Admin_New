@@ -1,226 +1,209 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Settings, Save, AlertCircle, Truck, Banknote, Bell } from 'lucide-react';
+import { Save, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 export default function SettingsManager() {
     const supabase = createClient();
-    const [groceryEnabled, setGroceryEnabled] = useState(false);
-    const [baseDeliveryFee, setBaseDeliveryFee] = useState('30');
-    const [perKmFee, setPerKmFee] = useState('10');
-    const [customerPlatformFee, setCustomerPlatformFee] = useState('5');
-    const [alertsEnabled, setAlertsEnabled] = useState(true);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+
+    // Settings State
+    const [minVersion, setMinVersion] = useState('1.0.0');
+    const [deliveryRadius, setDeliveryRadius] = useState('10');
+    const [enableGrocery, setEnableGrocery] = useState(true);
+    const [baseDeliveryFee, setBaseDeliveryFee] = useState('30');
+    const [perKmFee, setPerKmFee] = useState('10');
+    const [platformFee, setPlatformFee] = useState('5');
+
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
     useEffect(() => {
-        fetchSettings();
+        loadSettings();
     }, []);
 
-    const fetchSettings = async () => {
+    const loadSettings = async () => {
         try {
             const { data, error } = await supabase
                 .from('app_settings')
-                .select('key, value');
+                .select('*');
 
-            if (error && error.code !== 'PGRST116') {
-                console.error('Error fetching settings:', error);
-            }
+            if (error) throw error;
 
             if (data) {
-                data.forEach((setting: any) => {
-                    switch (setting.key) {
-                        case 'enable_grocery':
-                            setGroceryEnabled(setting.value === true || setting.value === 'true');
-                            break;
-                        case 'base_delivery_fee':
-                            setBaseDeliveryFee(String(setting.value || 30));
-                            break;
-                        case 'per_km_fee':
-                            setPerKmFee(String(setting.value || 10));
-                            break;
-                        case 'customer_platform_fee':
-                        case 'platform_fee':
-                            setCustomerPlatformFee(String(setting.value || 5));
-                            break;
-                        case 'realtime_alerts_enabled':
-                            setAlertsEnabled(setting.value === true || setting.value === 'true');
-                            break;
-                    }
-                });
+                const version = data.find(s => s.key === 'min_supported_version')?.value;
+                const radius = data.find(s => s.key === 'delivery_radius_km')?.value;
+                const grocery = data.find(s => s.key === 'enable_grocery')?.value;
+                const baseFee = data.find(s => s.key === 'base_delivery_fee')?.value;
+                const kmFee = data.find(s => s.key === 'per_km_fee')?.value;
+                const platFee = data.find(s => s.key === 'platform_fee')?.value;
+
+                if (version !== undefined) setMinVersion(String(version).replace(/"/g, ''));
+                if (radius !== undefined) setDeliveryRadius(String(radius));
+                if (grocery !== undefined) setEnableGrocery(Boolean(grocery));
+                if (baseFee !== undefined) setBaseDeliveryFee(String(baseFee));
+                if (kmFee !== undefined) setPerKmFee(String(kmFee));
+                if (platFee !== undefined) setPlatformFee(String(platFee));
             }
         } catch (error) {
-            console.error('Error:', error);
+            console.error('Error loading settings:', error);
+            setMessage({ type: 'error', text: 'Failed to load settings' });
         } finally {
             setLoading(false);
         }
     };
 
-    const saveSetting = async (key: string, value: any, description: string) => {
+    const handleSave = async () => {
         setSaving(true);
         setMessage(null);
 
         try {
-            const { error } = await supabase
-                .from('app_settings')
-                .upsert({ key, value, description });
+            const updates = [
+                { key: 'min_supported_version', value: JSON.stringify(minVersion), description: 'Minimum supported version' },
+                { key: 'delivery_radius_km', value: parseFloat(deliveryRadius), description: 'Max delivery radius in KM' },
+                { key: 'enable_grocery', value: enableGrocery, description: 'Enable Grocery Module' },
+                { key: 'base_delivery_fee', value: parseFloat(baseDeliveryFee), description: 'Base delivery fee (up to 2km)' },
+                { key: 'per_km_fee', value: parseFloat(perKmFee), description: 'Fee per km after base distance' },
+                { key: 'platform_fee', value: parseFloat(platformFee), description: 'Platform fee per order' }
+            ];
 
-            if (error) throw error;
-            setMessage({ type: 'success', text: `${description} updated successfully.` });
+            for (const update of updates) {
+                const { error } = await supabase
+                    .from('app_settings')
+                    .upsert(update, { onConflict: 'key' });
+                if (error) throw error;
+            }
+
+            setMessage({ type: 'success', text: 'Settings saved successfully' });
         } catch (error: any) {
-            setMessage({ type: 'error', text: error.message });
+            console.error('Error saving settings:', error);
+            setMessage({ type: 'error', text: error.message || 'Failed to save settings' });
         } finally {
             setSaving(false);
         }
     };
 
-    const handleGroceryToggle = () => {
-        const newValue = !groceryEnabled;
-        setGroceryEnabled(newValue);
-        saveSetting('enable_grocery', newValue, 'Grocery feature');
-    };
-
-    const handleAlertsToggle = () => {
-        const newValue = !alertsEnabled;
-        setAlertsEnabled(newValue);
-        saveSetting('realtime_alerts_enabled', newValue, 'Real-time alerts');
-    };
-
-    const handleSaveDeliveryFees = () => {
-        saveSetting('base_delivery_fee', parseFloat(baseDeliveryFee) || 30, 'Base delivery fee');
-        saveSetting('per_km_fee', parseFloat(perKmFee) || 10, 'Per-km delivery fee');
-    };
-
-    const handleSaveCustomerFee = () => {
-        saveSetting('customer_platform_fee', parseFloat(customerPlatformFee) || 5, 'Customer platform fee');
-    };
-
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center p-12">
-                <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
-            </div>
-        );
-    }
+    if (loading) return <div className="p-8">Loading settings...</div>;
 
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8">
-            <div className="flex items-center gap-4 mb-8">
-                <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center">
-                    <Settings className="text-blue-500 w-6 h-6" />
-                </div>
-                <div>
-                    <h2 className="text-xl font-bold text-slate-900">App Configurations</h2>
-                    <p className="text-sm text-slate-500">Manage global application features and settings</p>
-                </div>
-            </div>
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 max-w-2xl">
+            <h2 className="text-xl font-bold text-slate-900 mb-6">App Configuration</h2>
 
             {message && (
-                <div className={`mb-6 p-4 rounded-xl flex items-center gap-3 ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                    <AlertCircle size={20} />
-                    <p className="font-medium">{message.text}</p>
+                <div className={`p-4 rounded-xl mb-6 flex items-center gap-3 ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                    }`}>
+                    {message.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
+                    <span className="font-medium">{message.text}</span>
                 </div>
             )}
 
             <div className="space-y-6">
-                {/* Grocery Toggle */}
-                <div className="flex items-center justify-between p-6 bg-slate-50 rounded-xl border border-slate-100">
-                    <div className="flex gap-4">
-                        <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-sm">
-                            <span className="text-2xl">🥦</span>
-                        </div>
-                        <div>
-                            <h3 className="font-semibold text-slate-900 mb-1">Grocery & Vegetables</h3>
-                            <p className="text-sm text-slate-500 max-w-md">Enable grocery delivery options.</p>
-                        </div>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" className="sr-only peer" checked={groceryEnabled} onChange={handleGroceryToggle} disabled={saving} />
-                        <div className="w-14 h-7 bg-slate-200 peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-orange-500"></div>
-                        <span className="ml-3 text-sm font-medium text-slate-900">{groceryEnabled ? 'Active' : 'Inactive'}</span>
-                    </label>
+                {/* Min Version */}
+                <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-slate-900">Minimum Supported App Version</label>
+                    <input
+                        type="text"
+                        value={minVersion}
+                        onChange={(e) => setMinVersion(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all font-medium"
+                        placeholder="e.g. 1.0.0"
+                    />
+                    <p className="text-xs text-slate-400">Force users to update if they are below this version.</p>
                 </div>
 
-                {/* Real-time Alerts Toggle */}
-                <div className="flex items-center justify-between p-6 bg-slate-50 rounded-xl border border-slate-100">
-                    <div className="flex gap-4">
-                        <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-sm">
-                            <Bell className="w-6 h-6 text-purple-500" />
-                        </div>
-                        <div>
-                            <h3 className="font-semibold text-slate-900 mb-1">Real-time Order Alerts</h3>
-                            <p className="text-sm text-slate-500 max-w-md">Toast notifications when new orders arrive.</p>
-                        </div>
+                {/* Delivery Radius */}
+                <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-slate-900">Delivery Radius (KM)</label>
+                    <div className="relative">
+                        <input
+                            type="number"
+                            value={deliveryRadius}
+                            onChange={(e) => setDeliveryRadius(e.target.value)}
+                            className="w-full px-4 py-3 rounded-xl border border-slate-200 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all font-medium"
+                            placeholder="10"
+                        />
+                        <div className="absolute right-4 top-3 text-slate-500 font-medium">km</div>
                     </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" className="sr-only peer" checked={alertsEnabled} onChange={handleAlertsToggle} disabled={saving} />
-                        <div className="w-14 h-7 bg-slate-200 peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-purple-500"></div>
-                        <span className="ml-3 text-sm font-medium text-slate-900">{alertsEnabled ? 'Active' : 'Inactive'}</span>
-                    </label>
+                    <p className="text-xs text-slate-400">Restaurants outside this radius will not be shown to customers.</p>
                 </div>
 
-                {/* Distance-Based Delivery Fee */}
-                <div className="p-6 bg-slate-50 rounded-xl border border-slate-100">
-                    <div className="flex gap-4 mb-4">
-                        <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-sm">
-                            <Truck className="w-6 h-6 text-blue-500" />
-                        </div>
-                        <div>
-                            <h3 className="font-semibold text-slate-900 mb-1">Delivery Fee (Distance-Based)</h3>
-                            <p className="text-sm text-slate-500">Base fee for first 2 km + per-km charge after.</p>
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                        <div>
-                            <label className="text-sm text-slate-600 mb-2 block">Base Fee (First 2 km)</label>
-                            <div className="relative">
-                                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400">₹</span>
-                                <input type="number" value={baseDeliveryFee} onChange={(e) => setBaseDeliveryFee(e.target.value)} className="pl-8 pr-4 py-2 border border-slate-200 rounded-lg w-full focus:ring-2 focus:ring-blue-500" min="0" />
-                            </div>
-                        </div>
-                        <div>
-                            <label className="text-sm text-slate-600 mb-2 block">Per KM (After 2 km)</label>
-                            <div className="relative">
-                                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400">₹</span>
-                                <input type="number" value={perKmFee} onChange={(e) => setPerKmFee(e.target.value)} className="pl-8 pr-4 py-2 border border-slate-200 rounded-lg w-full focus:ring-2 focus:ring-blue-500" min="0" />
-                                <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-sm">/km</span>
-                            </div>
-                        </div>
-                    </div>
-                    <button onClick={handleSaveDeliveryFees} disabled={saving} className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">
-                        <Save size={16} /> Save Delivery Fees
-                    </button>
-                </div>
-
-                {/* Customer Platform Fee */}
-                <div className="p-6 bg-slate-50 rounded-xl border border-slate-100">
-                    <div className="flex gap-4 mb-4">
-                        <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-sm">
-                            <Banknote className="w-6 h-6 text-green-500" />
-                        </div>
-                        <div>
-                            <h3 className="font-semibold text-slate-900 mb-1">Customer Platform Fee</h3>
-                            <p className="text-sm text-slate-500">Fixed fee charged to customers per order. Restaurant fees are configured per-restaurant.</p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-4">
+                {/* Fees Section */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-slate-900">Base Delivery Fee</label>
                         <div className="relative">
-                            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400">₹</span>
-                            <input type="number" value={customerPlatformFee} onChange={(e) => setCustomerPlatformFee(e.target.value)} className="pl-8 pr-4 py-2 border border-slate-200 rounded-lg w-32 focus:ring-2 focus:ring-green-500" min="0" />
+                            <input
+                                type="number"
+                                value={baseDeliveryFee}
+                                onChange={(e) => setBaseDeliveryFee(e.target.value)}
+                                className="w-full px-4 py-3 rounded-xl border border-slate-200 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all font-medium"
+                                placeholder="30"
+                            />
+                            <div className="absolute right-4 top-3 text-slate-500 font-medium">₹</div>
                         </div>
-                        <button onClick={handleSaveCustomerFee} disabled={saving} className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50">
-                            <Save size={16} /> Save
-                        </button>
+                    </div>
+                    <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-slate-900">Fee Per KM</label>
+                        <div className="relative">
+                            <input
+                                type="number"
+                                value={perKmFee}
+                                onChange={(e) => setPerKmFee(e.target.value)}
+                                className="w-full px-4 py-3 rounded-xl border border-slate-200 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all font-medium"
+                                placeholder="10"
+                            />
+                            <div className="absolute right-4 top-3 text-slate-500 font-medium">₹</div>
+                        </div>
                     </div>
                 </div>
 
-                {/* Info Note */}
-                <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
-                    <p className="text-sm text-amber-700">
-                        <strong>Note:</strong> Restaurant Commission % and Transaction Charges are configured per-restaurant in the Restaurants tab.
-                    </p>
+                <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-slate-900">Platform Fee</label>
+                    <div className="relative">
+                        <input
+                            type="number"
+                            value={platformFee}
+                            onChange={(e) => setPlatformFee(e.target.value)}
+                            className="w-full px-4 py-3 rounded-xl border border-slate-200 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all font-medium"
+                            placeholder="5"
+                        />
+                        <div className="absolute right-4 top-3 text-slate-500 font-medium">₹</div>
+                    </div>
+                </div>
+
+                {/* Enable Grocery */}
+                <div className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50">
+                    <div>
+                        <h3 className="font-semibold text-slate-900">Enable Grocery</h3>
+                        <p className="text-sm text-slate-500">Show grocery tab in customer app</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={enableGrocery}
+                            onChange={(e) => setEnableGrocery(e.target.checked)}
+                            className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                    </label>
+                </div>
+
+                <div className="pt-4">
+                    <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-xl font-semibold hover:bg-slate-800 transition-all disabled:opacity-50"
+                    >
+                        {saving ? (
+                            <>Saving...</>
+                        ) : (
+                            <>
+                                <Save size={20} />
+                                Save Changes
+                            </>
+                        )}
+                    </button>
                 </div>
             </div>
         </div>
