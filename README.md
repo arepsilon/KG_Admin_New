@@ -1,36 +1,69 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 💼 Admin Dashboard
 
-## Getting Started
+Web application for platform administrators to manage the food delivery ecosystem.
 
-First, run the development server:
+## Setup
 
 ```bash
+cd admin-dashboard
+npm install
+
+# Create .env.local file (see env-template.txt)
+cp env-template.txt .env.local
+# Edit .env.local with your Supabase credentials
+
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Visit `http://localhost:3000`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Features
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Authentication**: Admin login with role verification
+- **Dashboard**: Platform overview with key metrics
+- **Real-time Orders**: Monitor all orders with live updates
+- **User Management**: View and manage customers, riders, restaurant owners
+- **Restaurant Management**: Approve/reject restaurants, view details
+- **Analytics**: Platform statistics and insights
 
-## Learn More
+## Key Pages
 
-To learn more about Next.js, take a look at the following resources:
+- `/` - Root redirect
+- `/login` - Admin authentication
+- `/dashboard` - Main dashboard with stats
+- `/dashboard/orders` - Order management
+- `/dashboard/restaurants` - Restaurant management
+- `/dashboard/users` - User management
+- `/dashboard/riders` - Rider management
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Environment Variables
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+See `env-template.txt` for required variables:
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
 
-## Deploy on Vercel
+## Creating an Admin User
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+After signing up through the customer app, run this SQL in Supabase:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```sql
+UPDATE profiles 
+SET role = 'admin' 
+WHERE email = 'your-admin-email@example.com';
+```
+
+## Deployment
+
+```bash
+npm run build
+# Deploy to Vercel or any hosting platform
+```
+
+## Tech Stack
+
+- Next.js 14 (App Router)
+- TypeScript
+- Tailwind CSS
+- Supabase (Database + Auth + Real-time)
+- Recharts (Analytics charts)
